@@ -1,4 +1,4 @@
-﻿namespace BioMetrixCore
+﻿namespace Native_BioReader
 {
     internal class UserInfo
     {

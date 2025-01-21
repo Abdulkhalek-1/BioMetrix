@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace BioMetrixCore
+namespace Native_BioReader
 {
     public class MachineInfo
     {
