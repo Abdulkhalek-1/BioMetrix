@@ -1,5 +1,7 @@
-﻿using System.Collections.Generic;
-using System;
+﻿using System;
+using System.Collections.Generic;
+using System.Net.Http;
+using System.Threading.Tasks;
 using Newtonsoft.Json;
 using zkemkeeper;
 using System.IO;
@@ -17,11 +19,11 @@ namespace Native_BioReader
 
             if (isDeviceConnected)
             {
-                Console.WriteLine("Device connected successfully.");
+                Console.WriteLine($"Device at {ipAddress}:{portNumber} connected successfully.");
             }
             else
             {
-                Console.WriteLine("Failed to connect to the device. Check the IP address and port.");
+                Console.WriteLine($"Failed to connect to the device at {ipAddress}:{portNumber}. Check the IP address and port.");
             }
 
             return isDeviceConnected;
@@ -88,18 +90,123 @@ namespace Native_BioReader
             return users;
         }
 
+        public ICollection<LogInfo> GetLogs(int machineNumber)
+        {
+            if (!isDeviceConnected)
+            {
+                Console.WriteLine("Device not connected. Please connect first.");
+                return null;
+            }
+
+            ICollection<LogInfo> logs = new List<LogInfo>();
+
+            if (!objCZKEM.ReadGeneralLogData(machineNumber))
+            {
+                int errorCode = 0;
+                objCZKEM.GetLastError(ref errorCode);
+                Console.WriteLine($"Failed to read logs. Error Code: {errorCode}");
+                return logs;
+            }
+
+            string enrollNumber;
+            int verifyMode, inOutMode, year, month, day, hour, minute, second;
+
+            // Initialize workCode before passing it by reference
+            int workCode = 0;
+
+            // Use 'ref' for workCode
+            while (objCZKEM.SSR_GetGeneralLogData(machineNumber, out enrollNumber, out verifyMode, out inOutMode,
+                                                   out year, out month, out day, out hour, out minute, out second,
+                                                   ref workCode))
+            {
+                logs.Add(new LogInfo
+                {
+                    user_hash = enrollNumber,
+                    VerifyMode = verifyMode,
+                    indRegId = inOutMode,
+                    dateTime = new DateTime(year, month, day, hour, minute, second),
+                    WorkCode = workCode
+                });
+            }
+
+            Console.WriteLine($"Retrieved {logs.Count} logs successfully.");
+            return logs;
+        }
+
+
         public bool IsDeviceConnected => isDeviceConnected;
     }
 
     class Config
     {
-        public string IPAddress { get; set; }
-        public int Port { get; set; }
+        public int INTERVAL = 60;
+        public string BASE_URL
+        {
+            get;
+            set;
+        }
+    }
+
+    class TaskItem
+    {
+        public string id
+        {
+            get;
+            set;
+        }
+        public string task_type
+        {
+            get;
+            set;
+        }
+        public string task_data
+        {
+            get;
+            set;
+        }
+        public string status
+        {
+            get;
+            set;
+        }
+        public string created_at
+        {
+            get;
+            set;
+        }
+        public string updated_at
+        {
+            get;
+            set;
+        }
+
+        public Dictionary<string, string> TaskData
+        {
+            get
+            {
+                if (!string.IsNullOrEmpty(task_data))
+                {
+                    try
+                    {
+                        return JsonConvert.DeserializeObject<Dictionary<string, string>>(task_data);
+                    }
+                    catch (JsonException)
+                    {
+                        // Handle parsing errors (e.g., log or return an empty dictionary)
+                        return new Dictionary<string, string>();
+                    }
+                }
+                return new Dictionary<string, string>();
+            }
+        }
+
     }
 
     internal class Program
     {
-        static void Main(string[] args)
+        private static HttpClient httpClient = new HttpClient();
+
+        static async Task Main(string[] args)
         {
             try
             {
@@ -111,37 +218,223 @@ namespace Native_BioReader
                     return;
                 }
 
-                App app = new App();
-                Console.WriteLine("Connecting to device...");
-                if (!app.Connect(config.IPAddress, config.Port))
+                httpClient.BaseAddress = new Uri(config.BASE_URL);
+
+                Console.WriteLine("Fetching tasks...");
+                List<TaskItem> tasks = await FetchTasks();
+
+                foreach (var task in tasks)
                 {
-                    return;
+                    bool success = await ProcessTask(task);
+
+                    if (success)
+                    {
+                        await UpdateTaskStatus(task.id, "completed");
+                    }
                 }
-
-                //Console.WriteLine("Creating a new user...");
-                //bool isCreated = app.CreateUser(1, "12345", "John Doe", "1234", 0, true);
-
-                //if (isCreated)
-                //{
-                //    Console.WriteLine("Fetching all user information...");
-                //    ICollection<UserInfo> users = app.GetAllUserInfo(1);
-
-                //    foreach (var user in users)
-                //    {
-                //        Console.WriteLine($"Enroll Number: {user.EnrollNumber}, Name: {user.Name}, Privilege: {user.Privelage}, Enabled: {user.Enabled}");
-                //    }
-                //}
-                //else
-                //{
-                //    Console.WriteLine("Failed to create the user.");
-                //}
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"An error occurred: {ex.Message}");
             }
-            Console.Write("Press Any Key...");
-            Console.ReadKey();
+        }
+
+        private static async Task<List<TaskItem>> FetchTasks()
+        {
+            try
+            {
+                HttpResponseMessage response = await httpClient.GetAsync($"{httpClient.BaseAddress}/zk_que/pending");
+                response.EnsureSuccessStatusCode();
+                string json = await response.Content.ReadAsStringAsync();
+                var responseObject = JsonConvert.DeserializeObject<ApiResponse>(json);
+
+                // Return the `data` property containing the list of tasks
+                return responseObject.Data ?? new List<TaskItem>();
+
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error fetching tasks: {ex.Message}");
+                return new List<TaskItem>();
+            }
+        }
+
+        private static async Task<bool> ProcessTask(TaskItem task)
+        {
+            App app = new App();
+
+            if (task.task_type == "create_user" && task.status == "pending")
+            {
+                // Extract IP and port safely using TryGetValue
+                if (task.TaskData.TryGetValue("ip", out
+                        var ip) &&
+                    task.TaskData.TryGetValue("port", out
+                        var portString) &&
+                    int.TryParse(portString, out
+                        var port))
+                {
+                    if (app.Connect(ip, port))
+                    {
+                        // Extract additional fields safely using TryGetValue
+                        task.TaskData.TryGetValue("user_hash", out
+                            var enrollNumberObj);
+                        task.TaskData.TryGetValue("name", out
+                            var nameObj);
+
+                        string enrollNumber = enrollNumberObj ?? string.Empty;
+                        string name = nameObj ?? string.Empty;
+                        string password = string.Empty;
+                        int privilege = 0;
+                        bool enabled = true;
+
+                        // Create the user on the device
+                        bool deviceUserCreated = app.CreateUser(1, enrollNumber, name, password, privilege, enabled);
+
+                        if (deviceUserCreated)
+                        {
+                            // If the user is successfully created on the device, send the data to the server
+                            Console.WriteLine($"CreateUserAsync({enrollNumber}, {name})");
+                            bool serverResponse = await CreateUserAsync(enrollNumber, name);
+
+                            if (serverResponse)
+                            {
+                                Console.WriteLine("User created successfully on the server.");
+                                return true;
+                            }
+                            else
+                            {
+                                Console.WriteLine("Failed to create user on the server.");
+                                return false;
+                            }
+                        }
+                        else
+                        {
+                            Console.WriteLine("Failed to create user on the device.");
+                            return false;
+                        }
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("Invalid IP or Port in task data.");
+                }
+            }
+            else if (task.task_type == "get_log" && task.status == "pending") 
+            {
+                // Extract IP and port safely using TryGetValue
+                if (task.TaskData.TryGetValue("ip", out var ip) &&
+                    task.TaskData.TryGetValue("port", out var portString) &&
+                    int.TryParse(portString, out var port))
+                {
+                    if (app.Connect(ip, port))
+                    {
+                        // Fetch logs from the device
+                        var logs = app.GetLogs(1); // Assuming machineNumber is 1
+
+                        if (logs != null && logs.Count > 0)
+                        {
+                            // Convert logs to JSON
+                            string jsonLogs = JsonConvert.SerializeObject(logs);
+
+                            // Send logs to the API
+                            bool logsSent = await SendLogsToAPI(jsonLogs);
+
+                            if (logsSent)
+                            {
+                                Console.WriteLine("Logs sent to API successfully.");
+                                return true;
+                            }
+                            else
+                            {
+                                Console.WriteLine("Failed to send logs to API.");
+                                return false;
+                            }
+                        }
+                        else
+                        {
+                            Console.WriteLine("No logs found on the device.");
+                            return false;
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine("Failed to connect to the device.");
+                        return false;
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("Invalid IP or Port in task data.");
+                    return false;
+                }
+            }
+
+            return false;
+        }
+        private static async Task<bool> SendLogsToAPI(string jsonLogs)
+        {
+            try
+            {
+                // Prepare the payload as form data
+                var payload = new Dictionary<string, string>
+                {
+                    { "data", jsonLogs } // Ensure the key matches what the API expects
+                };
+
+                // Create FormUrlEncodedContent
+                var content = new FormUrlEncodedContent(payload);
+
+                // Make the POST request
+                HttpResponseMessage response = await httpClient.PostAsync($"{httpClient.BaseAddress}/zk_fingerprintsLogs/create", content);
+
+                // Ensure the request was successful
+                response.EnsureSuccessStatusCode();
+
+                // Read and log the API response
+                string responseBody = await response.Content.ReadAsStringAsync();
+                Console.WriteLine("API Response: " + responseBody);
+
+                return true;
+            }
+            catch (HttpRequestException e)
+            {
+                // Log any HTTP request errors
+                Console.WriteLine($"Error sending logs to API: {e.Message}");
+                return false;
+            }
+            catch (Exception ex)
+            {
+                // Log any other unexpected errors
+                Console.WriteLine($"Unexpected error sending logs to API: {ex.Message}");
+                return false;
+            }
+        }
+
+        private static async Task UpdateTaskStatus(string taskId, string status)
+        {
+            try
+            {
+                // Prepare the payload as form data
+                var formData = new Dictionary<string, string>
+                {
+                    { "status", status }
+                };
+
+                // Create FormUrlEncodedContent
+                var content = new FormUrlEncodedContent(formData);
+
+                // Make the POST request
+                HttpResponseMessage response = await httpClient.PostAsync($"{httpClient.BaseAddress}/zk_que/update/{taskId}", content);
+                response.EnsureSuccessStatusCode();
+
+                // Log success
+                Console.WriteLine($"Task {taskId} updated to {status}.");
+            }
+            catch (Exception ex)
+            {
+                // Log any errors
+                Console.WriteLine($"Error updating task {taskId}: {ex.Message}");
+            }
         }
 
         private static Config LoadConfig(string filePath)
@@ -157,6 +450,35 @@ namespace Native_BioReader
                 return null;
             }
         }
-    }
+        public static async Task<bool> CreateUserAsync(string userHash, string name)
+        {
+            var payload = new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                { "name", name },
+                { "user_hash", userHash }
+            });
 
+            try
+            {
+                HttpResponseMessage response = await httpClient.PostAsync($"{httpClient.BaseAddress}/zk_users/create", payload);
+                response.EnsureSuccessStatusCode(); // Throws an exception if the status code is not successful
+                string responseBody = await response.Content.ReadAsStringAsync();
+                return true;
+            }
+            catch (HttpRequestException e)
+            {
+                return false;
+            }
+        }
+
+        public class ApiResponse
+        {
+            [JsonProperty("data")]
+            public List<TaskItem> Data
+            {
+                get;
+                set;
+            }
+        }
+    }
 }
