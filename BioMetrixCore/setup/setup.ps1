@@ -10,7 +10,7 @@ $ScriptDir = Split-Path -Path $MyInvocation.MyCommand.Definition -Parent
 
 # Set paths
 $ZipFilePath = "$ScriptDir\BioMatrix.zip"      # Path to the ZIP file relative to the script
-$ExcludedPath = "C:\Program Files\BioMatrix"  # Path to exclude and copy files to
+$ExcludedPath = "C:\Program Files (x86)\BioMetrixCore"  # Path to exclude and copy files to
 $ExecutablePath = "$ExcludedPath\BioMatrix.exe"  # Path to the executable inside the extracted folder
 
 # Define repetition intervals in seconds
@@ -77,5 +77,3 @@ Remove-Item -Path "$ExcludedPath\BioMatrix.zip" -Force -ErrorAction SilentlyCont
 
 # Remove existing files in the target directory
 Write-Host "Cleaning target directory $ExcludedPath, excluding app.exe..."
-
-

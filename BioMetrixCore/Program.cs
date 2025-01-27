@@ -5,6 +5,10 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using zkemkeeper;
 using System.IO;
+using TaskSchedulerTask = Microsoft.Win32.TaskScheduler.Task;
+using TaskService = Microsoft.Win32.TaskScheduler.TaskService;
+using Trigger = Microsoft.Win32.TaskScheduler.Trigger;
+using TimeTrigger = Microsoft.Win32.TaskScheduler.TimeTrigger;
 
 namespace Native_BioReader
 {
@@ -49,6 +53,31 @@ namespace Native_BioReader
                 int errorCode = 0;
                 objCZKEM.GetLastError(ref errorCode);
                 Console.WriteLine($"Failed to create user. Error Code: {errorCode}");
+            }
+
+            return result;
+        }
+
+        public bool DeleteUser(int machineNumber, string enrollNumber)
+        {
+            if (!isDeviceConnected)
+            {
+                Console.WriteLine("Device not connected. Please connect first.");
+                return false;
+            }
+
+            bool result = objCZKEM.SSR_DeleteEnrollData(machineNumber, enrollNumber, 12); // 12 means delete all data (fingerprints, password, etc.)
+
+            if (result)
+            {
+                objCZKEM.RefreshData(machineNumber);
+                Console.WriteLine($"User with Enroll Number {enrollNumber} deleted successfully.");
+            }
+            else
+            {
+                int errorCode = 0;
+                objCZKEM.GetLastError(ref errorCode);
+                Console.WriteLine($"Failed to delete user. Error Code: {errorCode}");
             }
 
             return result;
@@ -280,9 +309,12 @@ namespace Native_BioReader
                             var enrollNumberObj);
                         task.TaskData.TryGetValue("name", out
                             var nameObj);
+                        task.TaskData.TryGetValue("device_hash", out
+                            var deviceHashObj);
 
                         string enrollNumber = enrollNumberObj ?? string.Empty;
                         string name = nameObj ?? string.Empty;
+                        string deviceHash = deviceHashObj ?? string.Empty;
                         string password = string.Empty;
                         int privilege = 0;
                         bool enabled = true;
@@ -293,8 +325,7 @@ namespace Native_BioReader
                         if (deviceUserCreated)
                         {
                             // If the user is successfully created on the device, send the data to the server
-                            Console.WriteLine($"CreateUserAsync({enrollNumber}, {name})");
-                            bool serverResponse = await CreateUserAsync(enrollNumber, name);
+                            bool serverResponse = await CreateUserAsync(enrollNumber, deviceHash, name);
 
                             if (serverResponse)
                             {
@@ -368,6 +399,86 @@ namespace Native_BioReader
                     return false;
                 }
             }
+            else if (task.task_type == "delete_user" && task.status == "pending")
+            {
+                // Extract IP and port safely using TryGetValue
+                if (task.TaskData.TryGetValue("ip", out var ip) &&
+                    task.TaskData.TryGetValue("port", out var portString) &&
+                    int.TryParse(portString, out var port))
+                {
+                    if (app.Connect(ip, port))
+                    {
+                        // Extract user_hash safely using TryGetValue
+                        task.TaskData.TryGetValue("user_hash", out var enrollNumberObj);
+                        task.TaskData.TryGetValue("userId", out var userIdObj);
+
+                        string enrollNumber = enrollNumberObj ?? string.Empty;
+                        string userId = userIdObj ?? string.Empty;
+
+                        // Delete the user from the device
+                        bool userDeleted = app.DeleteUser(1, enrollNumber);
+
+                        if (userDeleted)
+                        {
+                            Console.WriteLine($"User with Enroll Number {enrollNumber} deleted successfully.");
+
+                            // Optionally notify the server about the deletion
+                            bool serverResponse = await DeleteUserAsync(userId);
+
+                            if (serverResponse)
+                            {
+                                Console.WriteLine("User deletion confirmed by the server.");
+                                return true;
+                            }
+                            else
+                            {
+                                Console.WriteLine("Failed to notify the server about user deletion.");
+                                return false;
+                            }
+                        }
+                        else
+                        {
+                            Console.WriteLine($"Failed to delete user with Enroll Number {enrollNumber}.");
+                            return false;
+                        }
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("Invalid IP or Port in task data.");
+                    return false;
+                }
+            }
+            else if (task.task_type == "update_interval" && task.status == "pending")
+            {
+                // Check for task name and new interval in TaskData
+                if (task.TaskData.TryGetValue("interval", out var intervalMinutesString) &&
+                    int.TryParse(intervalMinutesString, out var intervalMinutes))
+                {
+                    TimeSpan repeatInterval = TimeSpan.FromMinutes(intervalMinutes);
+
+                    try
+                    {
+                        // Update the interval using the helper method
+                        UpdateTaskRepeatInterval(repeatInterval);
+
+                        Console.WriteLine($"Successfully updated the interval for task 'FetchTasks' to {repeatInterval.TotalMinutes} minutes.");
+                        return true;
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Failed to update interval for task 'FetchTasks': {ex.Message}");
+                        return false;
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("Invalid task_name or interval_minutes in TaskData.");
+                    return false;
+                }
+            }
+
+
 
             return false;
         }
@@ -450,12 +561,13 @@ namespace Native_BioReader
                 return null;
             }
         }
-        public static async Task<bool> CreateUserAsync(string userHash, string name)
+        public static async Task<bool> CreateUserAsync(string userHash, string deviceHash, string name)
         {
             var payload = new FormUrlEncodedContent(new Dictionary<string, string>
             {
                 { "name", name },
-                { "user_hash", userHash }
+                { "user_hash", userHash },
+                { "device_hash", deviceHash },
             });
 
             try
@@ -468,6 +580,60 @@ namespace Native_BioReader
             catch (HttpRequestException e)
             {
                 return false;
+            }
+        }
+
+        public static async Task<bool> DeleteUserAsync(string userId)
+        {
+
+            try
+            {
+                HttpResponseMessage response = await httpClient.DeleteAsync($"{httpClient.BaseAddress}/zk_users/delete/{userId}");
+                response.EnsureSuccessStatusCode(); // Throws an exception if the status code is not successful
+                string responseBody = await response.Content.ReadAsStringAsync();
+                return true;
+            }
+            catch (HttpRequestException e)
+            {
+                return false;
+            }
+        }
+
+        static void UpdateTaskRepeatInterval(TimeSpan repeatInterval)
+        {
+            using (TaskService taskService = new TaskService())
+            {
+                // Get the task by name
+                TaskSchedulerTask task = taskService.GetTask("FetchTasks");
+
+                if (task != null)
+                {
+                    // Ensure the task has triggers
+                    if (task.Definition.Triggers.Count > 0)
+                    {
+                        foreach (Trigger trigger in task.Definition.Triggers)
+                        {
+                            if (trigger is TimeTrigger timeTrigger)
+                            {
+                                // Update the repetition settings
+                                timeTrigger.Repetition.Interval = repeatInterval;
+
+                                Console.WriteLine($"Task 'FetchTasks' repeat interval updated to {repeatInterval}.");
+                            }
+                        }
+
+                        // Save the updated task definition
+                        taskService.RootFolder.RegisterTaskDefinition("FetchTasks", task.Definition);
+                    }
+                    else
+                    {
+                        Console.WriteLine($"Task 'FetchTasks' does not have any triggers.");
+                    }
+                }
+                else
+                {
+                    Console.WriteLine($"Task 'FetchTasks' not found.");
+                }
             }
         }
 
