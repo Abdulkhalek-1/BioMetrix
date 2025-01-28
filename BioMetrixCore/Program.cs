@@ -4,11 +4,15 @@ using System.Net.Http;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using zkemkeeper;
+using Newtonsoft.Json.Linq;
 using System.IO;
+using Quobject.SocketIoClientDotNet.Client;
 using TaskSchedulerTask = Microsoft.Win32.TaskScheduler.Task;
 using TaskService = Microsoft.Win32.TaskScheduler.TaskService;
 using Trigger = Microsoft.Win32.TaskScheduler.Trigger;
 using TimeTrigger = Microsoft.Win32.TaskScheduler.TimeTrigger;
+using System.Runtime.InteropServices;
+using System.Windows.Forms;
 
 namespace Native_BioReader
 {
@@ -237,37 +241,50 @@ namespace Native_BioReader
 
         static async Task Main(string[] args)
         {
-            try
+
+            // Connect to the Socket.IO server
+            var socket = IO.Socket("http://192.168.1.69:3000");
+
+            socket.On("message", async (data) =>
             {
-                // Load configuration from JSON file
-                Config config = LoadConfig("config.json");
-                if (config == null)
+                var message = JObject.Parse(data.ToString());
+                if (message["message"].ToString() == "start_fetch")
                 {
-                    Console.WriteLine("Failed to load configuration.");
-                    return;
-                }
-
-                httpClient.BaseAddress = new Uri(config.BASE_URL);
-
-                Console.WriteLine("Fetching tasks...");
-                List<TaskItem> tasks = await FetchTasks();
-
-                foreach (var task in tasks)
-                {
-                    bool success = await ProcessTask(task);
-
-                    if (success)
+                    try
                     {
-                        await UpdateTaskStatus(task.id, "completed");
+                        // Load configuration from JSON file
+                        Config config = LoadConfig("config.json");
+                        if (config == null)
+                        {
+                            Console.WriteLine("Failed to load configuration.");
+                            return;
+                        }
+
+                        httpClient.BaseAddress = new Uri(config.BASE_URL);
+
+                        Console.WriteLine("Fetching tasks...");
+                        List<TaskItem> tasks = await FetchTasks();
+
+                        foreach (var task in tasks)
+                        {
+                            bool success = await ProcessTask(task);
+
+                            if (success)
+                            {
+                                await UpdateTaskStatus(task.id, "completed");
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"An error occurred: {ex.Message}");
                     }
                 }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"An error occurred: {ex.Message}");
-            }
-        }
+            });
 
+            Console.ReadLine();
+            socket.Disconnect();
+        }
         private static async Task<List<TaskItem>> FetchTasks()
         {
             try
@@ -423,7 +440,7 @@ namespace Native_BioReader
                             Console.WriteLine($"User with Enroll Number {enrollNumber} deleted successfully.");
 
                             // Optionally notify the server about the deletion
-                            bool serverResponse = await DeleteUserAsync(userId);
+                            bool serverResponse = await DeleteUserAsync(enrollNumber);
 
                             if (serverResponse)
                             {
@@ -589,8 +606,8 @@ namespace Native_BioReader
             try
             {
                 HttpResponseMessage response = await httpClient.DeleteAsync($"{httpClient.BaseAddress}/zk_users/delete/{userId}");
-                response.EnsureSuccessStatusCode(); // Throws an exception if the status code is not successful
                 string responseBody = await response.Content.ReadAsStringAsync();
+                response.EnsureSuccessStatusCode(); // Throws an exception if the status code is not successful
                 return true;
             }
             catch (HttpRequestException e)
