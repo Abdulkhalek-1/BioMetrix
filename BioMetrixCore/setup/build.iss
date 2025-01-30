@@ -23,6 +23,9 @@ PrivilegesRequired=admin
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
+[InstallDelete]
+Type: files; Name: "{app}\*"
+
 [Files]
 Source: "C:\Users\abdul\Desktop\BioMetrix\BioMetrixCore\setup\BioMatrix.zip"; DestDir: "{app}"; Flags: ignoreversion
 Source: "C:\Users\abdul\Desktop\BioMetrix\BioMetrixCore\setup\setup.ps1"; DestDir: "{app}"; Flags: ignoreversion
@@ -38,7 +41,7 @@ Filename: "{sys}\cmd.exe"; Parameters: "/C del ""{app}\setup.ps1""";
 var
   UserInputPage: TInputQueryWizardPage;
   UserInput: String;
-
+  
 procedure InitializeWizard;
 begin
   // Create a custom page for user input

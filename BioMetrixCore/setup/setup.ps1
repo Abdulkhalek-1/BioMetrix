@@ -39,8 +39,7 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 # Function to create a scheduled task
 function Create-Task {
     param (
-        [string]$TaskName,
-        [int]$RepetitionInterval
+        [string]$TaskName
     )
 
     # Check if the task already exists and delete it if it does
@@ -53,8 +52,7 @@ function Create-Task {
     $Action = New-ScheduledTaskAction -Execute $ExecutablePath
 
     # Create the Trigger for the Task
-    $Trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) `
-        -RepetitionInterval (New-TimeSpan -Seconds $RepetitionInterval)
+    $Trigger = New-ScheduledTaskTrigger -AtStartup
 
     # Set Task Settings
     $Settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
@@ -63,12 +61,12 @@ function Create-Task {
     $Principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
 
     # Register the Task
-    Write-Host "Creating scheduled task $TaskName interval $RepetitionInterval seconds..."
+    Write-Host "Creating scheduled task $TaskName"
     Register-ScheduledTask -TaskName $TaskName -Action $Action -Trigger $Trigger -Settings $Settings -Principal $Principal
 }
 
 # Create three tasks with different arguments and intervals
-Create-Task -TaskName "FetchTasks" -RepetitionInterval $RunInterval
+Create-Task -TaskName "FetchTasks"
 Write-Host "All tasks created successfully!"
 
 # Remove existing files in the target directory

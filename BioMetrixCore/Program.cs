@@ -4,15 +4,14 @@ using System.Net.Http;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using zkemkeeper;
-using Newtonsoft.Json.Linq;
 using System.IO;
 using Quobject.SocketIoClientDotNet.Client;
 using TaskSchedulerTask = Microsoft.Win32.TaskScheduler.Task;
 using TaskService = Microsoft.Win32.TaskScheduler.TaskService;
 using Trigger = Microsoft.Win32.TaskScheduler.Trigger;
 using TimeTrigger = Microsoft.Win32.TaskScheduler.TimeTrigger;
-using System.Runtime.InteropServices;
-using System.Windows.Forms;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement;
+using System.Reflection;
 
 namespace Native_BioReader
 {
@@ -123,7 +122,7 @@ namespace Native_BioReader
             return users;
         }
 
-        public ICollection<LogInfo> GetLogs(int machineNumber)
+        public ICollection<LogInfo> GetLogs(int machineNumber, string ip, string port)
         {
             if (!isDeviceConnected)
             {
@@ -133,6 +132,7 @@ namespace Native_BioReader
 
             ICollection<LogInfo> logs = new List<LogInfo>();
 
+           
             if (!objCZKEM.ReadGeneralLogData(machineNumber))
             {
                 int errorCode = 0;
@@ -143,6 +143,7 @@ namespace Native_BioReader
 
             string enrollNumber;
             int verifyMode, inOutMode, year, month, day, hour, minute, second;
+            string deviceId = $"{ip}:{port}";
 
             // Initialize workCode before passing it by reference
             int workCode = 0;
@@ -154,6 +155,7 @@ namespace Native_BioReader
             {
                 logs.Add(new LogInfo
                 {
+                    device_hash = deviceId,
                     user_hash = enrollNumber,
                     VerifyMode = verifyMode,
                     indRegId = inOutMode,
@@ -162,7 +164,7 @@ namespace Native_BioReader
                 });
             }
 
-            Console.WriteLine($"Retrieved {logs.Count} logs successfully.");
+            Console.WriteLine($"Retrieved {logs.Count} logs from device {deviceId} successfully.");
             return logs;
         }
 
@@ -241,51 +243,69 @@ namespace Native_BioReader
 
         static async Task Main(string[] args)
         {
+            
 
-            // Connect to the Socket.IO server
-            var socket = IO.Socket("http://192.168.1.69:3000");
-
-            socket.On("message", async (data) =>
+            var client = new SocketClient();
+            client.Connect();
+            Config config = LoadConfig("config.json");
+            if (config == null)
             {
-                var message = JObject.Parse(data.ToString());
-                if (message["message"].ToString() == "start_fetch")
-                {
-                    try
-                    {
-                        // Load configuration from JSON file
-                        Config config = LoadConfig("config.json");
-                        if (config == null)
-                        {
-                            Console.WriteLine("Failed to load configuration.");
-                            return;
-                        }
-
-                        httpClient.BaseAddress = new Uri(config.BASE_URL);
-
-                        Console.WriteLine("Fetching tasks...");
-                        List<TaskItem> tasks = await FetchTasks();
-
-                        foreach (var task in tasks)
-                        {
-                            bool success = await ProcessTask(task);
-
-                            if (success)
-                            {
-                                await UpdateTaskStatus(task.id, "completed");
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"An error occurred: {ex.Message}");
-                    }
-                }
-            });
+                Console.WriteLine("Failed to load configuration.");
+                return;
+            }
+            httpClient.BaseAddress = new Uri(config.BASE_URL);
 
             Console.ReadLine();
-            socket.Disconnect();
+
+            client.Disconnect();
+
+            //// Connect to the Socket.IO server
+            //var socket = IO.Socket("https://zone.native-code-iq.com:3000/");
+            //socket.On("connect", () =>
+            //{
+            //    Console.WriteLine("Connected");
+            //    socket.Emit("zk_joinRoom", "zk_105");
+            //});
+            //socket.On("zk_message", async (data) =>
+            //{
+            //    if (data.ToString() == "start_fetch")
+            //    {
+            //        try
+            //        {
+            //            // Load configuration from JSON file
+            //            Config config = LoadConfig("config.json");
+            //            if (config == null)
+            //            {
+            //                Console.WriteLine("Failed to load configuration.");
+            //                return;
+            //            }
+
+            //            httpClient.BaseAddress = new Uri(config.BASE_URL);
+
+            //            Console.WriteLine("Fetching tasks...");
+            //            List<TaskItem> tasks = await FetchTasks();
+
+            //            foreach (var task in tasks)
+            //            {
+            //                bool success = await ProcessTask(task);
+
+            //                if (success)
+            //                {
+            //                    await UpdateTaskStatus(task.id, "completed");
+            //                }
+            //            }
+            //        }
+            //        catch (Exception ex)
+            //        {
+            //            Console.WriteLine($"An error occurred: {ex.Message}");
+            //        }
+            //    }
+            //});
+
+            //Console.ReadLine();
+            //socket.Disconnect();
         }
-        private static async Task<List<TaskItem>> FetchTasks()
+        public static async Task<List<TaskItem>> FetchTasks()
         {
             try
             {
@@ -305,10 +325,9 @@ namespace Native_BioReader
             }
         }
 
-        private static async Task<bool> ProcessTask(TaskItem task)
+        public static async Task<bool> ProcessTask(TaskItem task)
         {
             App app = new App();
-
             if (task.task_type == "create_user" && task.status == "pending")
             {
                 // Extract IP and port safely using TryGetValue
@@ -377,7 +396,7 @@ namespace Native_BioReader
                     if (app.Connect(ip, port))
                     {
                         // Fetch logs from the device
-                        var logs = app.GetLogs(1); // Assuming machineNumber is 1
+                        var logs = app.GetLogs(1, ip, portString); // Assuming machineNumber is 1
 
                         if (logs != null && logs.Count > 0)
                         {
@@ -495,8 +514,6 @@ namespace Native_BioReader
                 }
             }
 
-
-
             return false;
         }
         private static async Task<bool> SendLogsToAPI(string jsonLogs)
@@ -515,11 +532,12 @@ namespace Native_BioReader
                 // Make the POST request
                 HttpResponseMessage response = await httpClient.PostAsync($"{httpClient.BaseAddress}/zk_fingerprintsLogs/create", content);
 
-                // Ensure the request was successful
-                response.EnsureSuccessStatusCode();
-
                 // Read and log the API response
                 string responseBody = await response.Content.ReadAsStringAsync();
+                Console.WriteLine(responseBody);
+
+                // Ensure the request was successful
+                response.EnsureSuccessStatusCode();
                 Console.WriteLine("API Response: " + responseBody);
 
                 return true;
@@ -538,7 +556,7 @@ namespace Native_BioReader
             }
         }
 
-        private static async Task UpdateTaskStatus(string taskId, string status)
+        public static async Task UpdateTaskStatus(string taskId, string status)
         {
             try
             {
@@ -664,4 +682,59 @@ namespace Native_BioReader
             }
         }
     }
+
+
+    public class SocketClient
+    {
+        private Socket socket;
+
+
+        public void Connect()
+        {
+            socket = IO.Socket("https://zone.native-code-iq.com:3000/");
+
+            socket.On("connect", () =>
+            {
+                Console.WriteLine("Connected");
+                socket.Emit("zk_joinRoom", "zk_105");
+            });
+
+            socket.On("zk_message", async (data) =>
+            {
+                if (data.ToString() == "start_fetch")
+                {
+                    await HandleStartFetch();
+                }
+            });
+        }
+
+        private async Task HandleStartFetch()
+        {
+            try
+            {
+                Console.WriteLine("Fetching tasks...");
+                List<TaskItem> tasks = await Program.FetchTasks();
+
+                foreach (var task in tasks)
+                {
+                    bool success = await Program.ProcessTask(task);
+                    if (success)
+                    {
+                        await Program.UpdateTaskStatus(task.id, "completed");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"An error occurred: {ex.Message}");
+            }
+        }
+
+
+        public void Disconnect()
+        {
+            socket?.Disconnect();
+        }
+    }
+
 }
