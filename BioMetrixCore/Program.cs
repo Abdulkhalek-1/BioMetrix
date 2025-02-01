@@ -258,52 +258,6 @@ namespace Native_BioReader
             Console.ReadLine();
 
             client.Disconnect();
-
-            //// Connect to the Socket.IO server
-            //var socket = IO.Socket("https://zone.native-code-iq.com:3000/");
-            //socket.On("connect", () =>
-            //{
-            //    Console.WriteLine("Connected");
-            //    socket.Emit("zk_joinRoom", "zk_105");
-            //});
-            //socket.On("zk_message", async (data) =>
-            //{
-            //    if (data.ToString() == "start_fetch")
-            //    {
-            //        try
-            //        {
-            //            // Load configuration from JSON file
-            //            Config config = LoadConfig("config.json");
-            //            if (config == null)
-            //            {
-            //                Console.WriteLine("Failed to load configuration.");
-            //                return;
-            //            }
-
-            //            httpClient.BaseAddress = new Uri(config.BASE_URL);
-
-            //            Console.WriteLine("Fetching tasks...");
-            //            List<TaskItem> tasks = await FetchTasks();
-
-            //            foreach (var task in tasks)
-            //            {
-            //                bool success = await ProcessTask(task);
-
-            //                if (success)
-            //                {
-            //                    await UpdateTaskStatus(task.id, "completed");
-            //                }
-            //            }
-            //        }
-            //        catch (Exception ex)
-            //        {
-            //            Console.WriteLine($"An error occurred: {ex.Message}");
-            //        }
-            //    }
-            //});
-
-            //Console.ReadLine();
-            //socket.Disconnect();
         }
         public static async Task<List<TaskItem>> FetchTasks()
         {
@@ -717,6 +671,7 @@ namespace Native_BioReader
 
                 foreach (var task in tasks)
                 {
+                    await Program.UpdateTaskStatus(task.id, "in_progress");
                     bool success = await Program.ProcessTask(task);
                     if (success)
                     {
