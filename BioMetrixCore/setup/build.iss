@@ -24,7 +24,7 @@ PrivilegesRequired=admin
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [InstallDelete]
-Type: files; Name: "{app}\*"
+Type: filesandordirs; Name: "{app}\*"
 
 [Files]
 Source: "C:\Users\abdul\Desktop\BioMetrix\BioMetrixCore\setup\BioMatrix.zip"; DestDir: "{app}"; Flags: ignoreversion

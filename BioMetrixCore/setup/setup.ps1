@@ -11,7 +11,7 @@ $ScriptDir = Split-Path -Path $MyInvocation.MyCommand.Definition -Parent
 # Set paths
 $ZipFilePath = "$ScriptDir\BioMatrix.zip"      # Path to the ZIP file relative to the script
 $ExcludedPath = "C:\Program Files (x86)\BioMetrixCore"  # Path to exclude and copy files to
-$ExecutablePath = "$ExcludedPath\BioMatrix.exe"  # Path to the executable inside the extracted folder
+$ExecutablePath = "$ExcludedPath\launch.vbs"  # Path to the executable inside the extracted folder
 
 # Define repetition intervals in seconds
 $RunInterval          = 1 * 60   # 1 minutes
