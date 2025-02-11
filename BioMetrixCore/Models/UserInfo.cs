@@ -1,8 +1,7 @@
-﻿namespace Native_BioReader
+﻿namespace Native_BioReader.Models
 {
-    internal class UserInfo
+    public class UserInfo
     {
-
         public int MachineNumber { get; set; }
         public string EnrollNumber { get; set; }
         public string Name { get; set; }
