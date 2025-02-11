@@ -120,7 +120,6 @@ C:\Users\abdul\Desktop\BioMetrix\BioMetrixCore\bin\Debug\zh-Hant\Microsoft.Win32
 C:\Users\abdul\Desktop\BioMetrix\BioMetrixCore\obj\Debug\BioMetrixCore.csproj.AssemblyReference.cache
 C:\Users\abdul\Desktop\BioMetrix\BioMetrixCore\obj\Debug\Interop.zkemkeeper.dll
 C:\Users\abdul\Desktop\BioMetrix\BioMetrixCore\obj\Debug\BioMetrixCore.csproj.ResolveComReference.cache
-C:\Users\abdul\Desktop\BioMetrix\BioMetrixCore\obj\Debug\BioMatrix.Properties.Resources.resources
 C:\Users\abdul\Desktop\BioMetrix\BioMetrixCore\obj\Debug\BioMetrixCore.csproj.GenerateResource.cache
 C:\Users\abdul\Desktop\BioMetrix\BioMetrixCore\obj\Debug\BioMetrixCore.csproj.CoreCompileInputs.cache
 C:\Users\abdul\Desktop\BioMetrix\BioMetrixCore\obj\Debug\BioMatrix.exe.manifest
@@ -128,3 +127,4 @@ C:\Users\abdul\Desktop\BioMetrix\BioMetrixCore\obj\Debug\BioMatrix.application
 C:\Users\abdul\Desktop\BioMetrix\BioMetrixCore\obj\Debug\BioMetri.85DC5369.Up2Date
 C:\Users\abdul\Desktop\BioMetrix\BioMetrixCore\obj\Debug\BioMatrix.exe
 C:\Users\abdul\Desktop\BioMetrix\BioMetrixCore\obj\Debug\BioMatrix.pdb
+C:\Users\abdul\Desktop\BioMetrix\BioMetrixCore\obj\Debug\Native_BioReader.Properties.Resources.resources

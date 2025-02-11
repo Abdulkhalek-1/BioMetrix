@@ -7,7 +7,7 @@
     <ProjectGuid>{8289D5D0-D505-4B81-B6B9-D57D05771F71}</ProjectGuid>
     <OutputType>Exe</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>BioMatrix</RootNamespace>
+    <RootNamespace>Native_BioReader</RootNamespace>
     <AssemblyName>BioMatrix</AssemblyName>
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
@@ -231,13 +231,32 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Info\LogInfo.cs" />
-    <Compile Include="Info\UserIDInfo.cs" />
-    <Compile Include="Info\DeviceTimeInfo.cs" />
-    <Compile Include="Info\MachineInfo.cs" />
-    <Compile Include="Info\UserInfo.cs" />
+    <Compile Include="Models\LogInfo.cs" />
+    <Compile Include="Models\ApiResponse.cs" />
+    <Compile Include="Models\Config.cs" />
+    <Compile Include="Models\TaskItem.cs" />
+    <Compile Include="Models\UserInfo.cs" />
+    <Compile Include="Models\UserTemplate.cs" />
+    <Compile Include="Models\UserTemplateResponse.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Services\ApiService.cs" />
+    <Compile Include="Services\DeviceService.cs" />
+    <Compile Include="Services\TaskProcessor\Processors\DeleteUserProcessor.cs" />
+    <Compile Include="Services\TaskProcessor\Processors\GetLogProcessor.cs" />
+    <Compile Include="Services\TaskProcessor\Processors\GetUserFaceTemplatesProcessor.cs" />
+    <Compile Include="Services\TaskProcessor\Processors\GetUserFingerTemplatesProcessor.cs" />
+    <Compile Include="Services\TaskProcessor\Processors\ITaskProcessor.cs" />
+    <Compile Include="Services\TaskProcessor\Processors\CreateUserProcessor.cs" />
+    <Compile Include="Services\TaskProcessor\Processors\SetUserFaceTemplatesProcessor.cs" />
+    <Compile Include="Services\TaskProcessor\Processors\SetUserFingerTemplatesProcessor.cs" />
+    <Compile Include="Services\TaskProcessor\Processors\UpdateIntervalProcessor.cs" />
+    <Compile Include="Services\TaskProcessor\TaskProcessorFactory.cs" />
+    <Compile Include="Services\TaskProcessor\TaskProcessorManager.cs" />
+    <Compile Include="Utilities\ConfigHelper.cs" />
+    <Compile Include="Utilities\LoggingHelper.cs" />
+    <Compile Include="Services\SocketService.cs" />
+    <Compile Include="Utilities\TaskSchedulerHelper.cs" />
     <EmbeddedResource Include="Properties\Resources.resx">
       <Generator>ResXFileCodeGenerator</Generator>
       <LastGenOutput>Resources.Designer.cs</LastGenOutput>
@@ -301,6 +320,9 @@
       <IncludeHash>True</IncludeHash>
       <FileType>File</FileType>
     </PublishFile>
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="dlls\NewFolder1\" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
